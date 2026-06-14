@@ -1,0 +1,31 @@
+[package]
+name = "sasso"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.74"
+license = "MIT OR Apache-2.0"
+description = "PHP extension wrapping the sasso pure-Rust SCSS → CSS compiler, built with ext-php-rs."
+publish = false
+
+[lib]
+name = "sasso"
+crate-type = ["cdylib"]
+
+[dependencies]
+ext-php-rs = "0.15"
+# The crate that does the actual SCSS compiling is also named `sasso`; this
+# package is named `sasso` too (so the PHP extension registers as `sasso`), so
+# alias the dependency to `sasso_compiler` to avoid the name collision.
+sasso_compiler = { package = "sasso", version = "0.4.0" }
+
+# Pin sasso to the published 0.4.0 API, but build it from a fork branch that is
+# 0.4.0 plus two not-yet-released fixes (`!default` RHS short-circuit and
+# rgba/hsla special-value name preservation). The branch keeps version 0.4.0,
+# so the dependency constraint above still resolves; only the source is swapped.
+[patch.crates-io]
+sasso = { git = "https://github.com/shyim/sasso.git", branch = "integration/php-sasso-0.4.0" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

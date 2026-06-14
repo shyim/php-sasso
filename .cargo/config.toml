@@ -1,0 +1,16 @@
+# PHP extensions reference Zend/PHP symbols that are only resolved when the
+# `.so`/`.dylib` is dlopen'd into the PHP process. Tell the linker to leave
+# those symbols undefined at build time (resolved dynamically at load).
+[target.'cfg(target_vendor = "apple")']
+rustflags = [
+    "-C", "link-arg=-Wl,-undefined,dynamic_lookup",
+]
+
+# On musl (Alpine) the toolchain defaults to a statically-linked CRT, which
+# can't produce a `cdylib` — building a PHP shared module fails with "the
+# target `*-unknown-linux-musl` does not support these crate types". Disable
+# `crt-static` so musl links the C runtime dynamically and can emit a `.so`.
+[target.'cfg(all(target_os = "linux", target_env = "musl"))']
+rustflags = [
+    "-C", "target-feature=-crt-static",
+]

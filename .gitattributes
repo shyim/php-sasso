@@ -1,0 +1,7 @@
+# Keep the source archive PIE downloads lean: ship only what's needed to build
+# the extension (src/, Cargo.*, config.m4, composer.json), not dev extras.
+/.github       export-ignore
+/.gitattributes export-ignore
+/.gitignore    export-ignore
+/examples      export-ignore
+/install.sh    export-ignore
