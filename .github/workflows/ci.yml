@@ -58,5 +58,10 @@ jobs:
       - name: Build extension
         run: cargo build --release
 
+      # phpize copies PHP's run-tests.php into the project root; setup-php
+      # ships no build/ dir, so this is how the .phpt runner finds it.
+      - name: Generate run-tests.php
+        run: phpize
+
       - name: Run phpt test suite
         run: php tests/run.php

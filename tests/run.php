@@ -41,7 +41,11 @@ if ($ext === null) {
 // 2. Locate PHP's bundled run-tests.php (ships under the build/ dir).
 $runTests = getenv('RUN_TESTS_PHP') ?: null;
 if ($runTests === null) {
-    $guesses = [];
+    $guesses = [
+        // `phpize` drops run-tests.php into the project root / cwd.
+        $root . '/run-tests.php',
+        getcwd() . '/run-tests.php',
+    ];
     if (defined('PHP_BINARY')) {
         $prefix = dirname(dirname(PHP_BINARY));
         $guesses[] = $prefix . '/lib/php/build/run-tests.php';
@@ -56,8 +60,23 @@ if ($runTests === null) {
         if (is_file($g)) { $runTests = $g; break; }
     }
 }
+
+// Not found where a binary install would put it? Generate it with phpize,
+// which copies run-tests.php into the project root. This is what makes the
+// suite work on a setup-php / minimal install that ships no build/ dir.
+if (($runTests === null || !is_file($runTests)) && trim((string) @shell_exec('command -v phpize 2>/dev/null')) !== '') {
+    fwrite(STDERR, "run-tests.php not found; running phpize to generate it…\n");
+    $cwd = getcwd();
+    chdir($root);
+    passthru('phpize 2>&1', $phpizeCode);
+    chdir($cwd);
+    if ($phpizeCode === 0 && is_file($root . '/run-tests.php')) {
+        $runTests = $root . '/run-tests.php';
+    }
+}
+
 if ($runTests === null || !is_file($runTests)) {
-    fwrite(STDERR, "Could not locate run-tests.php. Set RUN_TESTS_PHP to its path.\n");
+    fwrite(STDERR, "Could not locate run-tests.php. Install phpize, or set RUN_TESTS_PHP to its path.\n");
     exit(1);
 }
 
