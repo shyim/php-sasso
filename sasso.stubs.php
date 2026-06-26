@@ -4,8 +4,8 @@
 
 namespace Sasso {
     /**
-     * A userland resolver for `@import` / `@use` / `@forward`, mirroring
-     * dart-sass's two-phase importer protocol.
+     * A userland resolver for `@import` / `@use` / `@forward`, mirroring dart-sass's
+     * two-phase importer protocol.
      *
      * Implement this in PHP and pass an instance to `Compiler::setImporter()` to
      * control where partials come from (a database, a virtual filesystem, an
@@ -30,9 +30,9 @@ namespace Sasso {
      *     public function canonicalize(string $url, bool $fromImport, ?string $containingUrl = null): ?string {
      *         return isset($this->files[$url]) ? "array:$url" : null;
      *     }
-     *     public function load(string $canonicalUrl): ?\Sasso\ImporterResult {
+     *     public function load(string $canonicalUrl): ?Sasso\ImporterResult {
      *         $key = substr($canonicalUrl, strlen('array:'));
-     *         return new \Sasso\ImporterResult($this->files[$key]);
+     *         return new Sasso\ImporterResult($this->files[$key]);
      *     }
      * }
      * ```
@@ -42,23 +42,23 @@ namespace Sasso {
          * Map a URL to its canonical identity, or `null` if not handled. MUST NOT
          * load the file.
          */
-        public function canonicalize(string $url, bool $fromImport, ?string $containingUrl = null): ?string;
+        public function canonicalize(string $url, bool $from_import, ?string $containing_url = null): ?string;
 
         /**
          * Load the source for a canonical string previously returned by
-         * `canonicalize()`. Returns a `Sasso\ImporterResult`, or `null` if it can
-         * no longer be found.
+         * `canonicalize()`. Returns a `Sasso\ImporterResult`, or `null` if it can no
+         * longer be found.
          */
-        public function load(string $canonicalUrl): ?\Sasso\ImporterResult;
+        public function load(string $canonical_url): mixed;
     }
 
     /**
-     * The source an `Importer::load()` produced — dart-sass's `ImporterResult`.
+     * The source an [`Importer::load`] produced — dart-sass's `ImporterResult`.
      *
      * ```php
-     * $r = new \Sasso\ImporterResult(
+     * $r = new Sasso\ImporterResult(
      *     '.a { color: red; }',
-     *     \Sasso\Compiler::SYNTAX_SCSS, // optional, defaults to SCSS
+     *     Sasso\Compiler::SYNTAX_SCSS, // optional, defaults to SCSS
      * );
      * ```
      */
@@ -66,25 +66,25 @@ namespace Sasso {
         /**
          * The stylesheet source text.
          */
-        public string $contents;
+        public string$contents;
 
         /**
-         * The syntax `$contents` is parsed with (a `Compiler::SYNTAX_*` constant;
+         * The syntax `contents` is parsed with (a `Compiler::SYNTAX_*` constant;
          * defaults to `SYNTAX_SCSS`).
          */
-        public int $syntax;
+        public int$syntax;
 
         /**
          * The URL recorded for this source in generated source maps; `null` falls
-         * back to the canonical URL.
+         * back to the canonical URL. Exposed in PHP as `$sourceMapUrl`.
          */
-        public ?string $sourceMapUrl;
+        public string$sourceMapUrl = null;
 
         /**
-         * Construct an importer result from `$contents`, an optional `SYNTAX_*`
+         * Construct an importer result from `contents`, an optional `SYNTAX_*`
          * constant (default SCSS), and an optional source-map URL.
          */
-        public function __construct(string $contents, ?int $syntax = null, ?string $sourceMapUrl = null) {}
+        public function __construct(string $contents, ?int $syntax = null, ?string $source_map_url = null) {}
     }
 
     /**
