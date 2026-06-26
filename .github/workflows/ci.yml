@@ -74,7 +74,16 @@ jobs:
         run: |
           # The built module's API must equal the running PHP's; a mismatch is
           # exactly the "Unable to initialize module" failure we are guarding.
-          ext=$(ls target/release/libsasso.dylib target/release/libsasso.so 2>/dev/null | head -1)
+          # cargo emits libsasso.so on Linux and libsasso.dylib on macOS.
+          ext=""
+          for f in target/release/libsasso.so target/release/libsasso.dylib; do
+            if [ -f "$f" ]; then ext="$f"; break; fi
+          done
+          if [ -z "$ext" ]; then
+            echo "no built libsasso module found under target/release/" >&2
+            exit 1
+          fi
+          echo "module: $ext"
           out=$(php -n -d extension="$PWD/$ext" -r 'echo extension_loaded("sasso") ? "loaded\n" : "NOT loaded\n";' 2>&1)
           echo "$out"
           echo "$out" | grep -q "^loaded$"
