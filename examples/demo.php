@@ -29,8 +29,12 @@ try {
 // A custom importer resolving partials from an in-memory map.
 $importer = new class implements Importer {
     private array $files = ['base' => '$brand: #e91e63;'];
-    public function resolve(string $url): ?string {
-        return $this->files[$url] ?? null;
+    public function canonicalize(string $url, bool $fromImport, ?string $containingUrl = null): ?string {
+        return isset($this->files[$url]) ? "mem:$url" : null;
+    }
+    public function load(string $canonicalUrl): ?Sasso\ImporterResult {
+        $key = substr($canonicalUrl, strlen('mem:'));
+        return new Sasso\ImporterResult($this->files[$key]);
     }
 };
 
