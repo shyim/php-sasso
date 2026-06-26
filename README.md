@@ -58,6 +58,21 @@ $ php -dextension=target/release/libsasso.dylib  your_script.php   # macOS
 $ php -dextension=target/release/libsasso.so     your_script.php   # Linux
 ```
 
+## Tests
+
+The `.phpt` suite under `tests/` exercises the public API. The runner builds the
+extension (if needed) and runs the suite against the freshly built cdylib — it
+does **not** require the extension to be installed in your `php.ini`:
+
+```console
+$ php tests/run.php                                   # whole suite
+$ php tests/run.php tests/030-importer-two-phase.phpt # a single test
+$ composer test                                       # same, via composer
+```
+
+It locates PHP's bundled `run-tests.php` automatically; override with
+`RUN_TESTS_PHP=/path/to/run-tests.php` if it can't be found.
+
 ## Usage
 
 The API is object-oriented: a single fluent `Sasso\Compiler` class.
@@ -92,20 +107,32 @@ try {
 
 `@import` / `@use` / `@forward` can be resolved from anywhere — a database, an
 archive, a virtual filesystem — by implementing the `Sasso\Importer` interface
-and passing an instance to `setImporter()`:
+and passing an instance to `setImporter()`. The interface mirrors dart-sass's
+two-phase protocol: `canonicalize()` maps a URL to a stable identity (without
+loading), and `load()` fetches that identity's source as a `Sasso\ImporterResult`:
 
 ```php
 <?php
 use Sasso\Compiler;
 use Sasso\Importer;
+use Sasso\ImporterResult;
 
 class ArrayImporter implements Importer {
     public function __construct(private array $files) {}
 
-    // Given the unquoted URL as written (e.g. "base" for @import "base"),
-    // return its SCSS/Sass source, or null if it cannot be found.
-    public function resolve(string $url): ?string {
-        return $this->files[$url] ?? null;
+    // Map the unquoted URL as written (e.g. "base" for @import "base") to a
+    // stable canonical string, or null if this importer can't resolve it.
+    // Must NOT load the file. Two URLs with the same canonical string are the
+    // same partial (the module-cache key).
+    public function canonicalize(string $url, bool $fromImport, ?string $containingUrl = null): ?string {
+        return isset($this->files[$url]) ? "array:$url" : null;
+    }
+
+    // Fetch the source for a canonical string canonicalize() returned, or null
+    // if it can no longer be found.
+    public function load(string $canonicalUrl): ?ImporterResult {
+        $key = substr($canonicalUrl, strlen('array:'));
+        return new ImporterResult($this->files[$key]);
     }
 }
 
@@ -118,18 +145,30 @@ $css = (new Compiler())
 ```
 
 The importer is consulted first; any `addImportPath()` load paths act as a
-fallback when `resolve()` returns `null`. If `resolve()` returns `null` and
-nothing else resolves the URL, the import fails with a `CompileException`.
+fallback when `canonicalize()` returns `null`. If `canonicalize()` returns `null`
+and nothing else resolves the URL, the import fails with a `CompileException`.
 
-If `resolve()` **throws**, that exception propagates out of `compile()`
-unchanged — same class, code and message — so you can surface a real error
-(a missing DB row, an I/O failure) instead of a generic "stylesheet not found":
+A `Sasso\ImporterResult` carries the partial's source plus, optionally, the
+syntax to parse it with (a `SYNTAX_*` constant; defaults to SCSS) and a
+source-map URL:
+
+```php
+new ImporterResult('.a { color: red; }', Compiler::SYNTAX_SCSS);
+```
+
+If `canonicalize()` or `load()` **throws**, that exception propagates out of
+`compile()` unchanged — same class, code and message — so you can surface a real
+error (a missing DB row, an I/O failure) instead of a generic "stylesheet not
+found":
 
 ```php
 class DbImporter implements Importer {
-    public function resolve(string $url): ?string {
-        $row = $this->db->find($url);              // may throw DbException
-        return $row?->source;                      // null => normal import error
+    public function canonicalize(string $url, bool $fromImport, ?string $containingUrl = null): ?string {
+        return $this->db->exists($url) ? "db:$url" : null;   // may throw DbException
+    }
+    public function load(string $canonicalUrl): ?ImporterResult {
+        $row = $this->db->find(substr($canonicalUrl, 3));    // may throw DbException
+        return $row ? new ImporterResult($row->source) : null;
     }
 }
 
@@ -168,7 +207,17 @@ echo (new Compiler())
 
 | Method | Description |
 | --- | --- |
-| `resolve(string $url): ?string` | Return the partial's SCSS/Sass source for `$url`, or `null` if not found. |
+| `canonicalize(string $url, bool $fromImport, ?string $containingUrl = null): ?string` | Map `$url` to a stable canonical string (don't load), or `null` if not handled. |
+| `load(string $canonicalUrl): ?Sasso\ImporterResult` | Fetch the source for a canonical string, or `null` if gone. |
+
+### `Sasso\ImporterResult`
+
+| Member | Description |
+| --- | --- |
+| `__construct(string $contents, ?int $syntax = null, ?string $sourceMapUrl = null)` | Source text, optional `SYNTAX_*` (default SCSS), optional source-map URL. |
+| `string $contents` | The stylesheet source text. |
+| `int $syntax` | The `SYNTAX_*` constant to parse `$contents` with. |
+| `?string $sourceMapUrl` | Source-map URL, or `null` to use the canonical URL. |
 
 All setters return `$this` for chaining. Invalid `STYLE_*` / `SYNTAX_*` values are
 reported (as a thrown exception) at `compile()` time.

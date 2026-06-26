@@ -4,28 +4,87 @@
 
 namespace Sasso {
     /**
-     * A userland resolver for `@import` / `@use` / `@forward`.
+     * A userland resolver for `@import` / `@use` / `@forward`, mirroring
+     * dart-sass's two-phase importer protocol.
      *
      * Implement this in PHP and pass an instance to `Compiler::setImporter()` to
      * control where partials come from (a database, a virtual filesystem, an
-     * archive, …). `resolve()` is given the unquoted URL exactly as written in the
-     * source (e.g. `"base"` for `@import "base"`) and must return the partial's
-     * SCSS/Sass source, or `null` if it cannot be found.
+     * archive, …). Resolution happens in two phases:
+     *
+     * 1. `canonicalize()` maps a (possibly relative, extension-less) URL — exactly
+     *    as written in the source, e.g. `"base"` for `@import "base"` — to a stable
+     *    canonical string that identifies the partial. It MUST NOT load the file.
+     *    Two URLs that canonicalize to the same string are the SAME partial (it is
+     *    the module-cache / dedup key). Return `null` if this importer cannot
+     *    resolve the URL. `$fromImport` is `true` for `@import` (which also allows
+     *    import-only files), `false` for `@use`/`@forward`; `$containingUrl` is the
+     *    canonical URL of the stylesheet making the request (or `null`), against
+     *    which relative URLs resolve.
+     * 2. `load()` is then given a canonical string this importer returned and
+     *    fetches its source as a `Sasso\ImporterResult` (or `null` if it can no
+     *    longer be found).
      *
      * ```php
      * class ArrayImporter implements Sasso\Importer {
      *     public function __construct(private array $files) {}
-     *     public function resolve(string $url): ?string {
-     *         return $this->files[$url] ?? null;
+     *     public function canonicalize(string $url, bool $fromImport, ?string $containingUrl = null): ?string {
+     *         return isset($this->files[$url]) ? "array:$url" : null;
+     *     }
+     *     public function load(string $canonicalUrl): ?\Sasso\ImporterResult {
+     *         $key = substr($canonicalUrl, strlen('array:'));
+     *         return new \Sasso\ImporterResult($this->files[$key]);
      *     }
      * }
      * ```
      */
     interface Importer {
         /**
-         * Resolve a partial URL to its SCSS/Sass source, or `null` if not found.
+         * Map a URL to its canonical identity, or `null` if not handled. MUST NOT
+         * load the file.
          */
-        public function resolve(string $url): ?string;
+        public function canonicalize(string $url, bool $fromImport, ?string $containingUrl = null): ?string;
+
+        /**
+         * Load the source for a canonical string previously returned by
+         * `canonicalize()`. Returns a `Sasso\ImporterResult`, or `null` if it can
+         * no longer be found.
+         */
+        public function load(string $canonicalUrl): ?\Sasso\ImporterResult;
+    }
+
+    /**
+     * The source an `Importer::load()` produced — dart-sass's `ImporterResult`.
+     *
+     * ```php
+     * $r = new \Sasso\ImporterResult(
+     *     '.a { color: red; }',
+     *     \Sasso\Compiler::SYNTAX_SCSS, // optional, defaults to SCSS
+     * );
+     * ```
+     */
+    class ImporterResult {
+        /**
+         * The stylesheet source text.
+         */
+        public string $contents;
+
+        /**
+         * The syntax `$contents` is parsed with (a `Compiler::SYNTAX_*` constant;
+         * defaults to `SYNTAX_SCSS`).
+         */
+        public int $syntax;
+
+        /**
+         * The URL recorded for this source in generated source maps; `null` falls
+         * back to the canonical URL.
+         */
+        public ?string $sourceMapUrl;
+
+        /**
+         * Construct an importer result from `$contents`, an optional `SYNTAX_*`
+         * constant (default SCSS), and an optional source-map URL.
+         */
+        public function __construct(string $contents, ?int $syntax = null, ?string $sourceMapUrl = null) {}
     }
 
     /**
@@ -112,7 +171,7 @@ namespace Sasso {
         /**
          * Set a userland `Sasso\Importer` that resolves `@import`/`@use`/`@forward`
          * partials. It is consulted first; any configured load paths act as a
-         * fallback when its `resolve()` returns `null`. Pass `null` to clear it.
+         * fallback when its `canonicalize()` returns `null`. Pass `null` to clear it.
          *
          * Throws if `$importer` is not an instance of `Sasso\Importer`.
          */

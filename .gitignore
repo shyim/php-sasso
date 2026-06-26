@@ -32,3 +32,13 @@
 /.libs
 /config.log
 /*~
+
+# phpt run artifacts (left behind only if a run is interrupted before cleanup)
+/tests/**/*.diff
+/tests/**/*.exp
+/tests/**/*.out
+/tests/**/*.log
+/tests/**/*.sh
+/tests/**/*.mem
+/tests/_fixtures_*
+php_test_results_*.txt
